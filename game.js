@@ -1,5 +1,5 @@
 // ============================================================
-// Snake Clash — v5 2-Player Local Multiplayer
+// Snake Clash — v6 1-Player & 2-Player Local Multiplayer
 // Large world, camera follow, drop shadows, sphere shading
 // ============================================================
 
@@ -197,6 +197,7 @@ class SpriteFactory {
         ctx.beginPath(); ctx.arc(lx + plx, ey + ply, er*0.55, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(rx + plx, ey + ply, er*0.55, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.arc(lx + er*0.2, ey - er*0.2, er*0.22, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(lx + er*0.2, ey - er*0.2, er*0.22, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(rx + er*0.2, ey - er*0.2, er*0.22, 0, Math.PI*2); ctx.fill();
         if (angry) {
@@ -616,7 +617,7 @@ class VFXManager {
 }
 
 // ============================================================
-// MENU — Sequential 2-Player Picker
+// MENU — Mode Selection + Sequential Character Picker
 // ============================================================
 class MenuScene extends Phaser.Scene {
     constructor() { super('Menu'); }
@@ -663,6 +664,7 @@ class MenuScene extends Phaser.Scene {
     }
     create() {
         const cx = GAME_W / 2;
+        this._numPlayers = 0;
         this._p1Starter = null;
         this._p2Starter = null;
 
@@ -672,13 +674,39 @@ class MenuScene extends Phaser.Scene {
         for (let x = 0; x < GAME_W; x += 80) { g.moveTo(x, 0); g.lineTo(x, GAME_H); }
         for (let y = 0; y < GAME_H; y += 80) { g.moveTo(0, y); g.lineTo(GAME_W, y); }
         g.strokePath();
-        this.add.text(cx, 80, 'Snake\nClash', { fontSize: `${48 * S}px`, fontFamily: 'Arial Black, sans-serif', color: '#FFD700', align: 'center', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
-        this._promptText = this.add.text(cx, 180, 'Player 1 — Choose Your Character!', { fontSize: `${20 * S}px`, color: '#44ff44', align: 'center' }).setOrigin(0.5);
+        this.add.text(cx, 80, 'KKKK\nSnake Clash', { fontSize: `${44 * S}px`, fontFamily: 'Arial Black, sans-serif', color: '#FFD700', align: 'center', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
 
-        const starters = ['kayla', 'kirsten', 'kate', 'kyle'];
+        // Mode selection
+        this._modeGroup = this.add.group();
+        const modeTitle = this.add.text(cx, 200, 'SELECT MODE', { fontSize: `${22 * S}px`, color: '#fff', fontFamily: 'Arial Black' }).setOrigin(0.5);
+        this._modeGroup.add(modeTitle);
+
+        const btn1P = this.add.rectangle(cx, 300, 400, 80, 0x1a3a1a).setStrokeStyle(3, 0x44ff44).setInteractive({ useHandCursor: true });
+        const btn1PText = this.add.text(cx, 293, '1 PLAYER', { fontSize: `${22 * S}px`, color: '#44ff44', fontFamily: 'Arial Black' }).setOrigin(0.5);
+        const btn1PDesc = this.add.text(cx, 318, 'Solo adventure', { fontSize: `${10 * S}px`, color: '#88cc88' }).setOrigin(0.5);
+        this._modeGroup.addMultiple([btn1P, btn1PText, btn1PDesc]);
+
+        const btn2P = this.add.rectangle(cx, 420, 400, 80, 0x1a1a3a).setStrokeStyle(3, 0x00ccff).setInteractive({ useHandCursor: true });
+        const btn2PText = this.add.text(cx, 413, '2 PLAYERS', { fontSize: `${22 * S}px`, color: '#00ccff', fontFamily: 'Arial Black' }).setOrigin(0.5);
+        const btn2PDesc = this.add.text(cx, 438, 'Same keyboard — WASD + Arrows', { fontSize: `${10 * S}px`, color: '#88aacc' }).setOrigin(0.5);
+        this._modeGroup.addMultiple([btn2P, btn2PText, btn2PDesc]);
+
+        btn1P.on('pointerover', () => btn1P.setStrokeStyle(3, 0xFFD700));
+        btn1P.on('pointerout', () => btn1P.setStrokeStyle(3, 0x44ff44));
+        btn2P.on('pointerover', () => btn2P.setStrokeStyle(3, 0xFFD700));
+        btn2P.on('pointerout', () => btn2P.setStrokeStyle(3, 0x00ccff));
+
+        btn1P.on('pointerdown', () => { audioMgr.init(); this._numPlayers = 1; this._showCharacterPicker(); });
+        btn2P.on('pointerdown', () => { audioMgr.init(); this._numPlayers = 2; this._showCharacterPicker(); });
+
+        // Character picker (hidden initially)
+        this._pickerGroup = this.add.group();
+        this._promptText = this.add.text(cx, 180, '', { fontSize: `${20 * S}px`, color: '#44ff44', align: 'center' }).setOrigin(0.5).setVisible(false);
+
         this._starterSprites = [];
         this._starterZones = [];
         this._starterOverlays = [];
+        const starters = ['kayla', 'kirsten', 'kate', 'kyle'];
 
         const CHARACTER_STATS_INFO = {
             kayla:   { size: 'Biggest', speed: 'Slowest' },
@@ -690,53 +718,81 @@ class MenuScene extends Phaser.Scene {
         starters.forEach((key, i) => {
             const pk = CHARACTER_DATA[key];
             const x = 120 + i * 210, y = 340;
-            this.add.circle(x, y, 55 * S, pk.colour, 0.08);
-            this.add.ellipse(x + 4, y + 50, 80, 30, 0x000000, 0.2);
-            const sprite = this.add.image(x, y, `starter_${key}_S`).setScale(0.7);
+            const bg = this.add.circle(x, y, 55 * S, pk.colour, 0.08).setVisible(false);
+            const shad = this.add.ellipse(x + 4, y + 50, 80, 30, 0x000000, 0.2).setVisible(false);
+            const sprite = this.add.image(x, y, `starter_${key}_S`).setScale(0.7).setVisible(false);
             this._starterSprites.push(sprite);
             const hitZone = this.add.zone(x, y, 100 * S, 100 * S).setInteractive({ useHandCursor: true });
+            hitZone.input.enabled = false;
             this._starterZones.push(hitZone);
-            this.tweens.add({ targets: sprite, y: y - 6, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-            this.add.text(x, y + 65, pk.name, { fontSize: `${16 * S}px`, color: '#fff', fontFamily: 'Arial Black', align: 'center' }).setOrigin(0.5);
-            this.add.text(x, y + 85, pk.type, { fontSize: `${11 * S}px`, color: '#ddd', align: 'center' }).setOrigin(0.5);
-            this.add.text(x, y + 105, pk.superName, { fontSize: `${11 * S}px`, color: '#FFD700', align: 'center' }).setOrigin(0.5);
-            // Size/speed info
+            const nameT = this.add.text(x, y + 65, pk.name, { fontSize: `${16 * S}px`, color: '#fff', fontFamily: 'Arial Black', align: 'center' }).setOrigin(0.5).setVisible(false);
+            const typeT = this.add.text(x, y + 85, pk.type, { fontSize: `${11 * S}px`, color: '#ddd', align: 'center' }).setOrigin(0.5).setVisible(false);
+            const superT = this.add.text(x, y + 105, pk.superName, { fontSize: `${11 * S}px`, color: '#FFD700', align: 'center' }).setOrigin(0.5).setVisible(false);
             const stats = CHARACTER_STATS_INFO[key];
-            this.add.text(x, y + 125, `${stats.size} | ${stats.speed}`, { fontSize: `${9 * S}px`, color: '#aaa', align: 'center' }).setOrigin(0.5);
-            // Grey-out overlay (hidden initially)
+            const statsT = this.add.text(x, y + 125, `${stats.size} | ${stats.speed}`, { fontSize: `${9 * S}px`, color: '#aaa', align: 'center' }).setOrigin(0.5).setVisible(false);
             const overlay = this.add.rectangle(x, y, 100 * S, 100 * S, 0x000000, 0.6).setVisible(false);
             const p1Label = this.add.text(x, y - 20, 'P1', { fontSize: `${18 * S}px`, color: '#44ff44', fontFamily: 'Arial Black', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setVisible(false);
             this._starterOverlays.push({ overlay, p1Label });
+            this._pickerGroup.addMultiple([bg, shad, sprite, nameT, typeT, superT, statsT]);
 
             hitZone.on('pointerdown', () => {
-                audioMgr.init();
-                if (!this._p1Starter) {
-                    // Player 1 picks
+                if (this._numPlayers === 1) {
+                    // Single player — pick and go
+                    this._p1Starter = key;
+                    this.scene.start('Game', { starter1: key, starter2: null, numPlayers: 1, level: 1, carryPL: 0, upgrades: [] });
+                } else if (!this._p1Starter) {
+                    // 2P: Player 1 picks
                     this._p1Starter = key;
                     overlay.setVisible(true);
                     p1Label.setVisible(true);
                     this._promptText.setText('Player 2 — Choose Your Character!').setColor('#00ccff');
                 } else if (!this._p2Starter) {
-                    // Player 2 picks (CAN pick same character)
+                    // 2P: Player 2 picks
                     this._p2Starter = key;
-                    this.scene.start('Game', { starter1: this._p1Starter, starter2: this._p2Starter, level: 1, carryPL: 0, upgrades: [] });
+                    this.scene.start('Game', { starter1: this._p1Starter, starter2: this._p2Starter, numPlayers: 2, level: 1, carryPL: 0, upgrades: [] });
                 }
             });
-            hitZone.on('pointerover', () => sprite.setScale(0.8));
-            hitZone.on('pointerout', () => sprite.setScale(0.7));
+            hitZone.on('pointerover', () => { if (sprite.visible) sprite.setScale(0.8); });
+            hitZone.on('pointerout', () => { if (sprite.visible) sprite.setScale(0.7); });
         });
-        this.add.text(cx, 510, 'P1: WASD + Q for Super | P2: Arrows + / for Super\nMobile: Left joystick P1, Right joystick P2', { fontSize: `${12 * S}px`, color: '#888', align: 'center', lineSpacing: 6 }).setOrigin(0.5);
+
+        this._controlsText = this.add.text(cx, 510, '', { fontSize: `${12 * S}px`, color: '#888', align: 'center', lineSpacing: 6 }).setOrigin(0.5).setVisible(false);
+    }
+
+    _showCharacterPicker() {
+        // Hide mode buttons
+        this._modeGroup.getChildren().forEach(c => c.setVisible(false));
+
+        // Show character picker
+        this._promptText.setVisible(true);
+        if (this._numPlayers === 1) {
+            this._promptText.setText('Choose Your Character!').setColor('#44ff44');
+            this._controlsText.setText('Move: WASD or Arrows | Superpower: Q\nMobile: Virtual joystick').setVisible(true);
+        } else {
+            this._promptText.setText('Player 1 — Choose Your Character!').setColor('#44ff44');
+            this._controlsText.setText('P1: WASD + Q for Super | P2: Arrows + / for Super\nMobile: Left joystick P1, Right joystick P2').setVisible(true);
+        }
+
+        this._pickerGroup.getChildren().forEach(c => c.setVisible(true));
+        this._starterZones.forEach(z => z.input.enabled = true);
+
+        // Tween sprites
+        this._starterSprites.forEach((sprite, i) => {
+            const y = 340;
+            this.tweens.add({ targets: sprite, y: y - 6, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        });
     }
 }
 
 // ============================================================
-// GAME SCENE — 2-Player Local Multiplayer
+// GAME SCENE — 1-Player & 2-Player Local Multiplayer
 // ============================================================
 class GameScene extends Phaser.Scene {
     constructor() { super('Game'); }
     init(data) {
         this.starter1Key = data.starter1 || 'kayla';
         this.starter2Key = data.starter2 || 'kyle';
+        this.numPlayers = data.numPlayers || 2;
         this.currentLevel = data.level || 1;
         this.carryPL = data.carryPL || 0;
         this.playerUpgrades = data.upgrades || [];
@@ -797,7 +853,7 @@ class GameScene extends Phaser.Scene {
 
     create() {
         const pk1 = CHARACTER_DATA[this.starter1Key];
-        const pk2 = CHARACTER_DATA[this.starter2Key];
+        const pk2 = this.numPlayers === 2 ? CHARACTER_DATA[this.starter2Key] : null;
         const lvlIdx = Math.min(this.currentLevel - 1, LEVEL_CONFIGS.length - 1);
         const lvlCfg = this.getLevelConfig(lvlIdx);
 
@@ -846,15 +902,25 @@ class GameScene extends Phaser.Scene {
         this.sharedVfx.createVignette();
         this.sharedVfx.initParticlePool();
 
-        // Create both players
-        this.p1 = this._createPlayer(this.starter1Key, WORLD_W / 2 - 100, WORLD_H / 2, 1);
-        this.p2 = this._createPlayer(this.starter2Key, WORLD_W / 2 + 100, WORLD_H / 2, 2);
-        this.players = [this.p1, this.p2];
+        // Create players
+        this.p1 = this._createPlayer(this.starter1Key, WORLD_W / 2 - (this.numPlayers === 2 ? 100 : 0), WORLD_H / 2, 1);
+        if (this.numPlayers === 2) {
+            this.p2 = this._createPlayer(this.starter2Key, WORLD_W / 2 + 100, WORLD_H / 2, 2);
+            this.players = [this.p1, this.p2];
+        } else {
+            this.p2 = null;
+            this.players = [this.p1];
+        }
 
-        // Camera midpoint
-        this.midpoint = this.add.circle(WORLD_W / 2, WORLD_H / 2, 1, 0x000000, 0).setDepth(0);
+        // Camera
         this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-        this.cameras.main.startFollow(this.midpoint, true, 0.08, 0.08);
+        if (this.numPlayers === 2) {
+            this.midpoint = this.add.circle(WORLD_W / 2, WORLD_H / 2, 1, 0x000000, 0).setDepth(0);
+            this.cameras.main.startFollow(this.midpoint, true, 0.08, 0.08);
+        } else {
+            this.midpoint = null;
+            this.cameras.main.startFollow(this.p1.gfx, true, 0.08, 0.08);
+        }
         this.cameras.main.setZoom(1.0);
 
         // Enemies + obstacles + power-ups
@@ -872,60 +938,83 @@ class GameScene extends Phaser.Scene {
         // Input — Split Controls
         this.p1Keys = this.input.keyboard.addKeys('W,A,S,D');
         this.p1SuperKey = this.input.keyboard.addKey('Q');
-        this.p2Keys = this.input.keyboard.createCursorKeys();
-        this.p2SuperKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH);
         this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.p1SuperKey.on('down', () => this.activateSuperpower(this.p1));
-        this.p2SuperKey.on('down', () => this.activateSuperpower(this.p2));
         this.escKey.on('down', () => this.togglePause());
+        if (this.numPlayers === 2) {
+            this.p2Keys = this.input.keyboard.createCursorKeys();
+            this.p2SuperKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH);
+            this.p2SuperKey.on('down', () => this.activateSuperpower(this.p2));
+        } else {
+            // In 1P mode, also allow arrow keys for P1 movement
+            this.p1AltKeys = this.input.keyboard.createCursorKeys();
+        }
 
-        // Mobile joystick — P1 left side, P2 right side
+        // Mobile joystick
         this.joystick1Active = false;
         this.joystick2Active = false;
-        this.joystick1Base = this.add.image(150, GAME_H - 130, 'joystick_base').setAlpha(0.25).setDepth(100).setScrollFactor(0);
-        this.joystick1Thumb = this.add.image(150, GAME_H - 130, 'joystick_thumb').setAlpha(0.45).setDepth(101).setScrollFactor(0);
-        this.joystick2Base = this.add.image(GAME_W - 150, GAME_H - 130, 'joystick_base').setAlpha(0.25).setDepth(100).setScrollFactor(0);
-        this.joystick2Thumb = this.add.image(GAME_W - 150, GAME_H - 130, 'joystick_thumb').setAlpha(0.45).setDepth(101).setScrollFactor(0);
-
-        // SP buttons
-        this.sp1Button = this.add.circle(80, GAME_H - 230, 28 * S, pk1.colour, 0.3).setStrokeStyle(3, 0xffd700, 0.5).setInteractive().setDepth(100).setScrollFactor(0);
-        this.add.text(80, GAME_H - 230, 'SP', { fontSize: `${12 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
-        this.sp1Button.on('pointerdown', () => this.activateSuperpower(this.p1));
-
-        this.sp2Button = this.add.circle(GAME_W - 80, GAME_H - 230, 28 * S, pk2.colour, 0.3).setStrokeStyle(3, 0xffd700, 0.5).setInteractive().setDepth(100).setScrollFactor(0);
-        this.add.text(GAME_W - 80, GAME_H - 230, 'SP', { fontSize: `${12 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
-        this.sp2Button.on('pointerdown', () => this.activateSuperpower(this.p2));
+        if (this.numPlayers === 1) {
+            // 1P: Single centred joystick
+            this.joystick1Base = this.add.image(150, GAME_H - 130, 'joystick_base').setAlpha(0.25).setDepth(100).setScrollFactor(0);
+            this.joystick1Thumb = this.add.image(150, GAME_H - 130, 'joystick_thumb').setAlpha(0.45).setDepth(101).setScrollFactor(0);
+            this.sp1Button = this.add.circle(GAME_W - 100, GAME_H - 150, 32 * S, pk1.colour, 0.3).setStrokeStyle(3, 0xffd700, 0.5).setInteractive().setDepth(100).setScrollFactor(0);
+            this.add.text(GAME_W - 100, GAME_H - 150, 'SP', { fontSize: `${14 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+            this.sp1Button.on('pointerdown', () => this.activateSuperpower(this.p1));
+            this.sp2Button = null;
+            this.joystick2Base = null;
+            this.joystick2Thumb = null;
+        } else {
+            // 2P: Left/right joysticks
+            this.joystick1Base = this.add.image(150, GAME_H - 130, 'joystick_base').setAlpha(0.25).setDepth(100).setScrollFactor(0);
+            this.joystick1Thumb = this.add.image(150, GAME_H - 130, 'joystick_thumb').setAlpha(0.45).setDepth(101).setScrollFactor(0);
+            this.joystick2Base = this.add.image(GAME_W - 150, GAME_H - 130, 'joystick_base').setAlpha(0.25).setDepth(100).setScrollFactor(0);
+            this.joystick2Thumb = this.add.image(GAME_W - 150, GAME_H - 130, 'joystick_thumb').setAlpha(0.45).setDepth(101).setScrollFactor(0);
+            this.sp1Button = this.add.circle(80, GAME_H - 230, 28 * S, pk1.colour, 0.3).setStrokeStyle(3, 0xffd700, 0.5).setInteractive().setDepth(100).setScrollFactor(0);
+            this.add.text(80, GAME_H - 230, 'SP', { fontSize: `${12 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+            this.sp1Button.on('pointerdown', () => this.activateSuperpower(this.p1));
+            this.sp2Button = this.add.circle(GAME_W - 80, GAME_H - 230, 28 * S, pk2.colour, 0.3).setStrokeStyle(3, 0xffd700, 0.5).setInteractive().setDepth(100).setScrollFactor(0);
+            this.add.text(GAME_W - 80, GAME_H - 230, 'SP', { fontSize: `${12 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+            this.sp2Button.on('pointerdown', () => this.activateSuperpower(this.p2));
+        }
 
         // Joystick pointer handling
         this.input.on('pointerdown', (ptr) => {
-            if (ptr.x < GAME_W / 2 && ptr.y > GAME_H * 0.5) {
-                this.joystick1Active = true;
-                this.joystick1Base.setPosition(ptr.x, ptr.y).setAlpha(0.4);
-                this.joystick1Thumb.setPosition(ptr.x, ptr.y).setAlpha(0.7);
-            } else if (ptr.x >= GAME_W / 2 && ptr.y > GAME_H * 0.5) {
-                this.joystick2Active = true;
-                this.joystick2Base.setPosition(ptr.x, ptr.y).setAlpha(0.4);
-                this.joystick2Thumb.setPosition(ptr.x, ptr.y).setAlpha(0.7);
+            if (this.numPlayers === 1) {
+                if (ptr.y > GAME_H * 0.5) {
+                    this.joystick1Active = true;
+                    this.joystick1Base.setPosition(ptr.x, ptr.y).setAlpha(0.4);
+                    this.joystick1Thumb.setPosition(ptr.x, ptr.y).setAlpha(0.7);
+                }
+            } else {
+                if (ptr.x < GAME_W / 2 && ptr.y > GAME_H * 0.5) {
+                    this.joystick1Active = true;
+                    this.joystick1Base.setPosition(ptr.x, ptr.y).setAlpha(0.4);
+                    this.joystick1Thumb.setPosition(ptr.x, ptr.y).setAlpha(0.7);
+                } else if (ptr.x >= GAME_W / 2 && ptr.y > GAME_H * 0.5) {
+                    this.joystick2Active = true;
+                    this.joystick2Base.setPosition(ptr.x, ptr.y).setAlpha(0.4);
+                    this.joystick2Thumb.setPosition(ptr.x, ptr.y).setAlpha(0.7);
+                }
             }
         });
         this.input.on('pointermove', (ptr) => {
             if (!ptr.isDown) return;
-            if (this.joystick1Active && ptr.x < GAME_W / 2) {
+            if (this.joystick1Active) {
                 const dx = ptr.x - this.joystick1Base.x, dy = ptr.y - this.joystick1Base.y, dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 5) { const clamp = Math.min(dist, 80), nx = dx / dist, ny = dy / dist; this.joystick1Thumb.setPosition(this.joystick1Base.x + nx * clamp, this.joystick1Base.y + ny * clamp); this.p1.dir.x = nx; this.p1.dir.y = ny; }
             }
-            if (this.joystick2Active && ptr.x >= GAME_W / 2) {
+            if (this.joystick2Active && this.p2 && this.joystick2Base) {
                 const dx = ptr.x - this.joystick2Base.x, dy = ptr.y - this.joystick2Base.y, dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 5) { const clamp = Math.min(dist, 80), nx = dx / dist, ny = dy / dist; this.joystick2Thumb.setPosition(this.joystick2Base.x + nx * clamp, this.joystick2Base.y + ny * clamp); this.p2.dir.x = nx; this.p2.dir.y = ny; }
             }
         });
         this.input.on('pointerup', (ptr) => {
-            if (this.joystick1Active && ptr.x < GAME_W / 2) {
+            if (this.joystick1Active) {
                 this.joystick1Active = false;
                 this.joystick1Thumb.setPosition(this.joystick1Base.x, this.joystick1Base.y);
                 this.joystick1Base.setAlpha(0.25); this.joystick1Thumb.setAlpha(0.45);
             }
-            if (this.joystick2Active && ptr.x >= GAME_W / 2) {
+            if (this.joystick2Active && this.joystick2Base) {
                 this.joystick2Active = false;
                 this.joystick2Thumb.setPosition(this.joystick2Base.x, this.joystick2Base.y);
                 this.joystick2Base.setAlpha(0.25); this.joystick2Thumb.setAlpha(0.45);
@@ -1011,17 +1100,21 @@ class GameScene extends Phaser.Scene {
         this.add.rectangle(38 + barW / 2, y0 + 66, barW, barH, 0x1a1a1a).setStrokeStyle(1, 0x333333).setDepth(200).setScrollFactor(0);
         this.hud1.auraBar = this.add.rectangle(38, y0 + 66, barW, barH - 4, 0x4488ff).setOrigin(0, 0.5).setDepth(201).setScrollFactor(0);
 
-        // P2 HUD — right side
-        this.hud2 = {};
-        const rx = GAME_W - 230;
-        this.hud2.name = this.add.text(rx, y0, `P2 ${pk2.name}`, { fontSize: `${12 * S}px`, color: '#00ccff', fontFamily: 'Arial Black' }).setDepth(200).setScrollFactor(0);
-        this.hud2.pl = this.add.text(rx, y0 + 22, 'PL: 10', { fontSize: `${11 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setDepth(200).setScrollFactor(0);
-        this.add.circle(rx + 4, y0 + 48, 6, 0xff4444).setDepth(200).setScrollFactor(0);
-        this.add.rectangle(rx + 18 + barW / 2, y0 + 48, barW, barH, 0x1a1a1a).setStrokeStyle(1, 0x333333).setDepth(200).setScrollFactor(0);
-        this.hud2.hpBar = this.add.rectangle(rx + 18, y0 + 48, barW, barH - 4, 0x44ff44).setOrigin(0, 0.5).setDepth(201).setScrollFactor(0);
-        this.add.circle(rx + 4, y0 + 66, 6, 0x4488ff).setDepth(200).setScrollFactor(0);
-        this.add.rectangle(rx + 18 + barW / 2, y0 + 66, barW, barH, 0x1a1a1a).setStrokeStyle(1, 0x333333).setDepth(200).setScrollFactor(0);
-        this.hud2.auraBar = this.add.rectangle(rx + 18, y0 + 66, barW, barH - 4, 0x4488ff).setOrigin(0, 0.5).setDepth(201).setScrollFactor(0);
+        // P2 HUD — right side (only in 2P mode)
+        if (pk2) {
+            this.hud2 = {};
+            const rx = GAME_W - 230;
+            this.hud2.name = this.add.text(rx, y0, `P2 ${pk2.name}`, { fontSize: `${12 * S}px`, color: '#00ccff', fontFamily: 'Arial Black' }).setDepth(200).setScrollFactor(0);
+            this.hud2.pl = this.add.text(rx, y0 + 22, 'PL: 10', { fontSize: `${11 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setDepth(200).setScrollFactor(0);
+            this.add.circle(rx + 4, y0 + 48, 6, 0xff4444).setDepth(200).setScrollFactor(0);
+            this.add.rectangle(rx + 18 + barW / 2, y0 + 48, barW, barH, 0x1a1a1a).setStrokeStyle(1, 0x333333).setDepth(200).setScrollFactor(0);
+            this.hud2.hpBar = this.add.rectangle(rx + 18, y0 + 48, barW, barH - 4, 0x44ff44).setOrigin(0, 0.5).setDepth(201).setScrollFactor(0);
+            this.add.circle(rx + 4, y0 + 66, 6, 0x4488ff).setDepth(200).setScrollFactor(0);
+            this.add.rectangle(rx + 18 + barW / 2, y0 + 66, barW, barH, 0x1a1a1a).setStrokeStyle(1, 0x333333).setDepth(200).setScrollFactor(0);
+            this.hud2.auraBar = this.add.rectangle(rx + 18, y0 + 66, barW, barH - 4, 0x4488ff).setOrigin(0, 0.5).setDepth(201).setScrollFactor(0);
+        } else {
+            this.hud2 = null;
+        }
 
         // Centre: Timer + Level + Score
         this.hudTimer = this.add.text(GAME_W / 2, y0, '60', { fontSize: `${22 * S}px`, color: '#fff', fontFamily: 'Arial Black' }).setOrigin(0.5, 0).setDepth(200).setScrollFactor(0);
@@ -1039,7 +1132,9 @@ class GameScene extends Phaser.Scene {
     updateMinimap() {
         const g = this.minimapGfx; g.clear();
         const sx = this._mmW / WORLD_W, sy = this._mmH / WORLD_H;
-        const maxPlayerPL = Math.max(this.p1.pl + this.p1.superPL, this.p2.pl + this.p2.superPL);
+        const maxPlayerPL = this.p2
+            ? Math.max(this.p1.pl + this.p1.superPL, this.p2.pl + this.p2.superPL)
+            : this.p1.pl + this.p1.superPL;
         // Enemies
         this.enemies.forEach(e => {
             const col = e.isElite ? 0xff0000 : (e.pl > maxPlayerPL ? 0xff4444 : 0xffff44);
@@ -1047,8 +1142,10 @@ class GameScene extends Phaser.Scene {
         });
         // P1 — green dot
         g.fillStyle(0x44ff44, 1); g.fillCircle(this._mmX + this.p1.x * sx, this._mmY + this.p1.y * sy, 3);
-        // P2 — cyan dot
-        g.fillStyle(0x00ccff, 1); g.fillCircle(this._mmX + this.p2.x * sx, this._mmY + this.p2.y * sy, 3);
+        // P2 — cyan dot (only in 2P)
+        if (this.p2) {
+            g.fillStyle(0x00ccff, 1); g.fillCircle(this._mmX + this.p2.x * sx, this._mmY + this.p2.y * sy, 3);
+        }
         // Power-ups
         this.powerUps.forEach(p => { g.fillStyle(0xffffff, 0.5); g.fillCircle(this._mmX + p.x * sx, this._mmY + p.y * sy, 1.5); });
     }
@@ -1254,11 +1351,18 @@ class GameScene extends Phaser.Scene {
             if (this.p1Keys.D.isDown) dx1 = 1;
             if (this.p1Keys.W.isDown) dy1 = -1;
             if (this.p1Keys.S.isDown) dy1 = 1;
+            // In 1P mode, also accept arrow keys for P1
+            if (this.numPlayers === 1 && this.p1AltKeys) {
+                if (this.p1AltKeys.left.isDown) dx1 = -1;
+                if (this.p1AltKeys.right.isDown) dx1 = 1;
+                if (this.p1AltKeys.up.isDown) dy1 = -1;
+                if (this.p1AltKeys.down.isDown) dy1 = 1;
+            }
             if (dx1 !== 0 || dy1 !== 0) { const len = Math.sqrt(dx1 * dx1 + dy1 * dy1); this.p1.dir.x = dx1 / len; this.p1.dir.y = dy1 / len; }
         }
 
-        // P2 input (arrows)
-        if (!this.joystick2Active) {
+        // P2 input (arrows) — only in 2P mode
+        if (this.numPlayers === 2 && this.p2 && !this.joystick2Active) {
             let dx2 = 0, dy2 = 0;
             if (this.p2Keys.left.isDown) dx2 = -1;
             if (this.p2Keys.right.isDown) dx2 = 1;
@@ -1349,14 +1453,23 @@ class GameScene extends Phaser.Scene {
         this.sharedVfx.updateEffects(dt);
 
         // Camera midpoint + dynamic zoom
-        this.midpoint.setPosition((this.p1.x + this.p2.x) / 2, (this.p1.y + this.p2.y) / 2);
-        const dist = Phaser.Math.Distance.Between(this.p1.x, this.p1.y, this.p2.x, this.p2.y);
-        const targetZoom = this.phase === 'duel' ? Phaser.Math.Clamp(1.0 - (dist - 300) * 0.001, 0.55, 0.95) : Phaser.Math.Clamp(1.0 - (dist - 300) * 0.001, 0.6, 1.0);
-        const curZoom = this.cameras.main.zoom;
-        this.cameras.main.setZoom(curZoom + (targetZoom - curZoom) * 0.05);
+        if (this.numPlayers === 2 && this.p2 && this.midpoint) {
+            this.midpoint.setPosition((this.p1.x + this.p2.x) / 2, (this.p1.y + this.p2.y) / 2);
+            const dist = Phaser.Math.Distance.Between(this.p1.x, this.p1.y, this.p2.x, this.p2.y);
+            const targetZoom = this.phase === 'duel' ? Phaser.Math.Clamp(1.0 - (dist - 300) * 0.001, 0.55, 0.95) : Phaser.Math.Clamp(1.0 - (dist - 300) * 0.001, 0.6, 1.0);
+            const curZoom = this.cameras.main.zoom;
+            this.cameras.main.setZoom(curZoom + (targetZoom - curZoom) * 0.05);
+        } else {
+            // 1P: fixed zoom
+            const targetZoom = this.phase === 'duel' ? 0.9 : 1.0;
+            const curZoom = this.cameras.main.zoom;
+            this.cameras.main.setZoom(curZoom + (targetZoom - curZoom) * 0.05);
+        }
 
         // Move enemies
-        const maxPlayerPL = Math.max(this.p1.pl + this.p1.superPL, this.p2.pl + this.p2.superPL);
+        const maxPlayerPL = this.p2
+            ? Math.max(this.p1.pl + this.p1.superPL, this.p2.pl + this.p2.superPL)
+            : this.p1.pl + this.p1.superPL;
         this.enemies.forEach(e => {
             // Process burn timer
             if (e.burnTimer > 0) {
@@ -1386,10 +1499,15 @@ class GameScene extends Phaser.Scene {
             const speedMult = isStunned ? 0 : (e.slowFactor !== undefined ? e.slowFactor : 1);
 
             if (e.isBoss && this.phase === 'duel') {
-                // Boss chases CLOSER player
-                const d1 = Phaser.Math.Distance.Between(this.p1.x, this.p1.y, e.x, e.y);
-                const d2 = Phaser.Math.Distance.Between(this.p2.x, this.p2.y, e.x, e.y);
-                const target = (d1 <= d2 && !this.p1.ghost) || this.p2.ghost ? this.p1 : this.p2;
+                // Boss chases CLOSER player (or only P1 in 1P)
+                let target;
+                if (this.p2) {
+                    const d1 = Phaser.Math.Distance.Between(this.p1.x, this.p1.y, e.x, e.y);
+                    const d2 = Phaser.Math.Distance.Between(this.p2.x, this.p2.y, e.x, e.y);
+                    target = (d1 <= d2 && !this.p1.ghost) || this.p2.ghost ? this.p1 : this.p2;
+                } else {
+                    target = this.p1;
+                }
                 const ddx = target.x - e.x, ddy = target.y - e.y, ddist = Math.sqrt(ddx * ddx + ddy * ddy);
                 if (ddist > 5) { e.dir.x = ddx / ddist; e.dir.y = ddy / ddist; }
                 e.x += e.dir.x * (e.speed + 40) * speedMult * dt; e.y += e.dir.y * (e.speed + 40) * speedMult * dt;
@@ -1438,7 +1556,13 @@ class GameScene extends Phaser.Scene {
                         this.audio.sfxDamage();
                         const angle = Math.atan2(ddy, ddx); p.x += Math.cos(angle) * 60; p.y += Math.sin(angle) * 60;
                         if (p.hp <= 0) {
-                            // Ghost system
+                            if (this.numPlayers === 1) {
+                                // 1P: instant game over
+                                p.hp = 0;
+                                this.gameOver('defeated');
+                                return;
+                            }
+                            // 2P: Ghost system
                             p.ghost = true;
                             p.ghostTimer = 5000;
                             p.hp = 0;
@@ -1446,7 +1570,7 @@ class GameScene extends Phaser.Scene {
                             p.pnLabel.setAlpha(0.3);
                             this.floatText(p.x, p.y, 'DOWN!', '#ff0000');
                             // Check if BOTH ghosts = game over
-                            if (this.p1.ghost && this.p2.ghost) { this.gameOver('defeated'); return; }
+                            if (this.p1.ghost && this.p2 && this.p2.ghost) { this.gameOver('defeated'); return; }
                         }
                     }
                 }
@@ -1492,7 +1616,7 @@ class GameScene extends Phaser.Scene {
         if (this.phase === 'countdown' && this.levelTime <= 10) this.startDuel();
         if (this.phase === 'duel' && this.levelTime <= 0) {
             if (this.boss) {
-                const combinedPL = (this.p1.pl + this.p1.superPL) + (this.p2.pl + this.p2.superPL);
+                const combinedPL = (this.p1.pl + this.p1.superPL) + (this.p2 ? (this.p2.pl + this.p2.superPL) : 0);
                 if (combinedPL >= this.boss.pl) this.duelWon(this.boss);
                 else this.gameOver('timeout');
             }
@@ -1522,9 +1646,9 @@ class GameScene extends Phaser.Scene {
         this.powerUps.forEach(p => { p.gfx.destroy(); p.text.destroy(); if (p.glow) p.glow.destroy(); if (p.shadow) p.shadow.destroy(); }); this.powerUps = [];
         this.obstacles.forEach(o => { o.gfx.destroy(); o.label.destroy(); if (o.shadow) o.shadow.destroy(); }); this.obstacles = [];
 
-        // Shrink arena around midpoint of both players
-        const midX = (this.p1.x + this.p2.x) / 2;
-        const midY = (this.p1.y + this.p2.y) / 2;
+        // Shrink arena around midpoint of player(s)
+        const midX = this.p2 ? (this.p1.x + this.p2.x) / 2 : this.p1.x;
+        const midY = this.p2 ? (this.p1.y + this.p2.y) / 2 : this.p1.y;
         const duelSize = 800;
         this.arenaLeft = midX - duelSize / 2; this.arenaTop = midY - duelSize / 2;
         this.arenaRight = midX + duelSize / 2; this.arenaBottom = midY + duelSize / 2;
@@ -1542,8 +1666,9 @@ class GameScene extends Phaser.Scene {
         // Boss — PL based on combined average
         const lvlIdx = Math.min(this.currentLevel - 1, LEVEL_CONFIGS.length - 1);
         const lvlCfg = this.getLevelConfig(lvlIdx);
-        const combinedPL = this.p1.pl + this.p2.pl;
-        const bossPL = Math.floor(combinedPL * 0.5 * lvlCfg.bossMulti);
+        const combinedPL = this.p1.pl + (this.p2 ? this.p2.pl : 0);
+        const bossMultiplier = this.numPlayers === 1 ? 0.8 : 0.5;
+        const bossPL = Math.floor(combinedPL * bossMultiplier * lvlCfg.bossMulti);
         const bossIdx = Math.min(this.currentLevel - 1, BOSS_NAMES.length - 1);
         const bossColour = BOSS_COLOURS[bossIdx];
         const bossHue = (bossIdx * 60) % 360;
@@ -1579,8 +1704,9 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(500, () => {
             this.scene.start('LevelComplete', {
                 starter1: this.starter1Key, starter2: this.starter2Key,
+                numPlayers: this.numPlayers,
                 level: this.currentLevel,
-                finalPL: this.p1.pl + this.p2.pl,
+                finalPL: this.p1.pl + (this.p2 ? this.p2.pl : 0),
                 score: this.score,
                 duelTime: Math.round(duelTime),
                 bossName: boss.name,
@@ -1594,8 +1720,9 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(400, () => {
             this.scene.start('GameOver', {
                 starter1: this.starter1Key, starter2: this.starter2Key,
+                numPlayers: this.numPlayers,
                 level: this.currentLevel,
-                finalPL: (this.p1.pl + this.p1.superPL) + (this.p2.pl + this.p2.superPL),
+                finalPL: (this.p1.pl + this.p1.superPL) + (this.p2 ? (this.p2.pl + this.p2.superPL) : 0),
                 score: this.score,
                 reason
             });
@@ -1612,13 +1739,15 @@ class GameScene extends Phaser.Scene {
         const aura1Pct = Math.max(0, this.p1.aura / this.p1.auraMax);
         this.hud1.auraBar.setSize(barW * aura1Pct, 12).setFillStyle(this.p1.aura >= 30 ? 0x4488ff : 0x884444);
 
-        // P2
-        const ePL2 = this.p2.pl + this.p2.superPL;
-        this.hud2.pl.setText(`PL: ${ePL2}`);
-        const hp2Pct = Math.max(0, this.p2.hp / 100);
-        this.hud2.hpBar.setSize(barW * hp2Pct, 12).setFillStyle(this.p2.ghost ? 0x555555 : hp2Pct > 0.5 ? 0x44ff44 : hp2Pct > 0.25 ? 0xffaa00 : 0xff4444);
-        const aura2Pct = Math.max(0, this.p2.aura / this.p2.auraMax);
-        this.hud2.auraBar.setSize(barW * aura2Pct, 12).setFillStyle(this.p2.aura >= 30 ? 0x4488ff : 0x884444);
+        // P2 (only if exists)
+        const ePL2 = this.p2 ? this.p2.pl + this.p2.superPL : 0;
+        if (this.hud2 && this.p2) {
+            this.hud2.pl.setText(`PL: ${ePL2}`);
+            const hp2Pct = Math.max(0, this.p2.hp / 100);
+            this.hud2.hpBar.setSize(barW * hp2Pct, 12).setFillStyle(this.p2.ghost ? 0x555555 : hp2Pct > 0.5 ? 0x44ff44 : hp2Pct > 0.25 ? 0xffaa00 : 0xff4444);
+            const aura2Pct = Math.max(0, this.p2.aura / this.p2.auraMax);
+            this.hud2.auraBar.setSize(barW * aura2Pct, 12).setFillStyle(this.p2.aura >= 30 ? 0x4488ff : 0x884444);
+        }
 
         // Centre
         this.hudTimer.setText(Math.ceil(this.levelTime).toString()).setColor(this.levelTime <= 10 ? '#FF4444' : '#ffffff');
@@ -1631,41 +1760,50 @@ class GameScene extends Phaser.Scene {
             const pPct = combinedPL / totalPL;
             this.duelBarPlayer.setSize(600 * pPct, 26).setPosition(GAME_W / 2 - 300 + 600 * pPct / 2, 90);
             this.duelBarBoss.setSize(600 * (1 - pPct), 26).setPosition(GAME_W / 2 - 300 + 600 * pPct + 600 * (1 - pPct) / 2, 90);
-            this.duelTextPlayer.setText(`TEAM ${combinedPL}`); this.duelTextBoss.setText(`${this.boss.name} ${this.boss.pl}`);
+            this.duelTextPlayer.setText(`${this.numPlayers === 2 ? 'TEAM' : 'YOU'} ${combinedPL}`); this.duelTextBoss.setText(`${this.boss.name} ${this.boss.pl}`);
         }
 
         // SP button alpha
         this.sp1Button.setAlpha(this.p1.aura >= 30 && !this.p1.ghost ? 0.5 : 0.15);
-        this.sp2Button.setAlpha(this.p2.aura >= 30 && !this.p2.ghost ? 0.5 : 0.15);
+        if (this.sp2Button && this.p2) {
+            this.sp2Button.setAlpha(this.p2.aura >= 30 && !this.p2.ghost ? 0.5 : 0.15);
+        }
     }
 }
 
 // ============================================================
-// LEVEL COMPLETE — 2 Player
+// LEVEL COMPLETE
 // ============================================================
 class LevelCompleteScene extends Phaser.Scene {
     constructor() { super('LevelComplete'); }
     init(data) { this.d = data; }
     create() {
         const d = this.d, cx = GAME_W / 2;
-        const pk1 = CHARACTER_DATA[d.starter1], pk2 = CHARACTER_DATA[d.starter2];
+        const pk1 = CHARACTER_DATA[d.starter1];
+        const pk2 = d.starter2 ? CHARACTER_DATA[d.starter2] : null;
+        const numPlayers = d.numPlayers || 2;
         this.add.rectangle(cx, GAME_H / 2, GAME_W, GAME_H, 0x0a0a1e);
         this.add.text(cx, 60, '⭐ LEVEL COMPLETE ⭐', { fontSize: `${26 * S}px`, color: '#FFD700', fontFamily: 'Arial Black', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5);
         this.add.text(cx, 100, `Level ${d.level}`, { fontSize: `${18 * S}px`, color: '#fff' }).setOrigin(0.5);
-        [
-            `P1: ${pk1.name}  |  P2: ${pk2.name}`,
-            `Combined PL: ${d.finalPL}`,
-            `Boss ${d.bossName} defeated in ${d.duelTime}s`,
-            `Score: ${d.score}`
-        ].forEach((s, i) => {
+        const lines = [];
+        if (numPlayers === 2 && pk2) {
+            lines.push(`P1: ${pk1.name}  |  P2: ${pk2.name}`);
+        } else {
+            lines.push(`${pk1.name}`);
+        }
+        lines.push(`Combined PL: ${d.finalPL}`);
+        lines.push(`Boss ${d.bossName} defeated in ${d.duelTime}s`);
+        lines.push(`Score: ${d.score}`);
+        lines.forEach((s, i) => {
             this.add.text(cx, 140 + i * 26 * S, s, { fontSize: `${12 * S}px`, color: '#ccc', align: 'center' }).setOrigin(0.5);
         });
         this.add.text(cx, 310, 'CHOOSE YOUR UPGRADE', { fontSize: `${18 * S}px`, color: '#FFD700', fontFamily: 'Arial Black' }).setOrigin(0.5);
-        this.add.text(cx, 338, '(Applies to both players)', { fontSize: `${10 * S}px`, color: '#888' }).setOrigin(0.5);
+        const applyText = numPlayers === 2 ? '(Applies to both players)' : '(Applies to your character)';
+        this.add.text(cx, 338, applyText, { fontSize: `${10 * S}px`, color: '#888' }).setOrigin(0.5);
         [
-            { key: 'pl', label: '🌀 Level Up!', desc: '+20 Base PL (both)', y: 380 },
-            { key: 'aura', label: '🔵 Extra Aura', desc: '+30 Max Aura (both)', y: 430 },
-            { key: 'speed', label: '💨 Speed Upgrade', desc: '+20 Base Speed (both)', y: 480 }
+            { key: 'pl', label: '🌀 Level Up!', desc: numPlayers === 2 ? '+20 Base PL (both)' : '+20 Base PL', y: 380 },
+            { key: 'aura', label: '🔵 Extra Aura', desc: numPlayers === 2 ? '+30 Max Aura (both)' : '+30 Max Aura', y: 430 },
+            { key: 'speed', label: '💨 Speed Upgrade', desc: numPlayers === 2 ? '+20 Base Speed (both)' : '+20 Base Speed', y: 480 }
         ].forEach(u => {
             const btn = this.add.rectangle(cx, u.y, 560, 55, 0x1a1a3e).setStrokeStyle(2, 0x4444aa).setInteractive({ useHandCursor: true });
             this.add.text(cx, u.y - 8, u.label, { fontSize: `${14 * S}px`, color: '#fff', fontFamily: 'Arial' }).setOrigin(0.5);
@@ -1675,6 +1813,7 @@ class LevelCompleteScene extends Phaser.Scene {
             btn.on('pointerdown', () => {
                 this.scene.start('Game', {
                     starter1: d.starter1, starter2: d.starter2,
+                    numPlayers: numPlayers,
                     level: d.level + 1,
                     carryPL: Math.floor(d.finalPL * 0.15),
                     upgrades: [...(d.upgrades || []), u.key]
@@ -1685,22 +1824,33 @@ class LevelCompleteScene extends Phaser.Scene {
 }
 
 // ============================================================
-// GAME OVER — 2 Player
+// GAME OVER
 // ============================================================
 class GameOverScene extends Phaser.Scene {
     constructor() { super('GameOver'); }
     init(data) { this.d = data; }
     create() {
         const d = this.d, cx = GAME_W / 2;
-        const pk1 = CHARACTER_DATA[d.starter1], pk2 = CHARACTER_DATA[d.starter2];
+        const pk1 = CHARACTER_DATA[d.starter1];
+        const pk2 = d.starter2 ? CHARACTER_DATA[d.starter2] : null;
+        const numPlayers = d.numPlayers || 2;
         this.add.rectangle(cx, GAME_H / 2, GAME_W, GAME_H, 0x0a0a1e);
         this.add.text(cx, 120, 'GAME OVER', { fontSize: `${36 * S}px`, color: '#FF4444', fontFamily: 'Arial Black', stroke: '#000', strokeThickness: 5 }).setOrigin(0.5);
-        this.add.text(cx, 170, d.reason === 'timeout' ? 'Time ran out — Boss survived!' : 'Both players down!', { fontSize: `${15 * S}px`, color: '#ff8888' }).setOrigin(0.5);
+        let reasonText;
+        if (d.reason === 'timeout') {
+            reasonText = 'Time ran out — Boss survived!';
+        } else if (numPlayers === 1) {
+            reasonText = 'You were defeated!';
+        } else {
+            reasonText = 'Both players down!';
+        }
+        this.add.text(cx, 170, reasonText, { fontSize: `${15 * S}px`, color: '#ff8888' }).setOrigin(0.5);
         this.add.text(cx, 210, `Level: ${d.level}  |  PL: ${d.finalPL}  |  Score: ${d.score}`, { fontSize: `${14 * S}px`, color: '#ccc' }).setOrigin(0.5);
-        this.add.text(cx, 240, `${pk1.name} + ${pk2.name}`, { fontSize: `${13 * S}px`, color: '#aaa' }).setOrigin(0.5);
+        const nameText = numPlayers === 2 && pk2 ? `${pk1.name} + ${pk2.name}` : pk1.name;
+        this.add.text(cx, 240, nameText, { fontSize: `${13 * S}px`, color: '#aaa' }).setOrigin(0.5);
         const retryBtn = this.add.rectangle(cx, 320, 440, 70, 0x225522).setStrokeStyle(2, 0x44aa44).setInteractive({ useHandCursor: true });
         this.add.text(cx, 320, 'RETRY LEVEL', { fontSize: `${16 * S}px`, color: '#44ff44', fontFamily: 'Arial Black' }).setOrigin(0.5);
-        retryBtn.on('pointerdown', () => this.scene.start('Game', { starter1: d.starter1, starter2: d.starter2, level: d.level, carryPL: 0, upgrades: [] }));
+        retryBtn.on('pointerdown', () => this.scene.start('Game', { starter1: d.starter1, starter2: d.starter2, numPlayers: numPlayers, level: d.level, carryPL: 0, upgrades: [] }));
         const menuBtn = this.add.rectangle(cx, 400, 440, 70, 0x333355).setStrokeStyle(2, 0x6666aa).setInteractive({ useHandCursor: true });
         this.add.text(cx, 400, 'MAIN MENU', { fontSize: `${16 * S}px`, color: '#8888ff', fontFamily: 'Arial Black' }).setOrigin(0.5);
         menuBtn.on('pointerdown', () => this.scene.start('Menu'));
